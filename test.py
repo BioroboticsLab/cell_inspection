@@ -78,7 +78,7 @@ def loop_epoches(testloader, classes, net, criterion):
 
     save_epoch = 0
 
-    for epoch in range(1):
+    for epoch in range(40):
         save_epoch = epoch
 
         print('*** Start testing in epoch {} ***'.format(epoch + 1))

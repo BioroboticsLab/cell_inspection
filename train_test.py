@@ -124,7 +124,7 @@ def loop_epoches(trainloader, testloader, classes, net, criterion, optimizer):
 
     save_epoch = 0
 
-    for epoch in range(5):
+    for epoch in range(40):
         running_loss = 0.0
         t_loss = 0.0
         train_i = 0

@@ -16,7 +16,7 @@ import numpy as np
 import itertools
 
 
-def test_net(testloader, classes, net, criterion, epoch, true_positives, true_negatives, false_positives, false_negatives, validation_loss, test_accuracy, f1_score, test_images, test_image_label, test_image_pred):
+def test_net(testloader, classes, b_size, net, criterion, epoch, true_positives, true_negatives, false_positives, false_negatives, validation_loss, test_accuracy, f1_score, test_images, test_image_label, test_image_pred):
     with torch.no_grad():
         val_loss = 0.0
         val_i = 0
@@ -52,11 +52,20 @@ def test_net(testloader, classes, net, criterion, epoch, true_positives, true_ne
                
         validation_loss += [val_loss / val_i]
 
-        precision = true_positives / (true_positives + false_positives)
-        recall = true_positives / (true_positives + false_negatives)
+        if (false_positives == 0 and true_positives == 0):
+            precision = 0
+        else:
+            precision = true_positives / (true_positives + false_positives)
+        if (false_negatives == 0 and true_positives == 0):
+            recall = 0
+        else:
+            recall = true_positives / (true_positives + false_negatives)
         numerator = precision * recall
         denominator = precision + recall
-        f1 = 2 * (numerator / denominator)
+        if (denominator == 0):
+            f1 = 0
+        else:
+            f1 = 2 * (numerator / denominator)
 
         print('Test Epoch: %d\t Average validation loss: %.6f\n Precision: {}\t Recall: {}'.format(precision, recall) %
                     (epoch + 1, val_loss / val_i))
@@ -67,7 +76,7 @@ def test_net(testloader, classes, net, criterion, epoch, true_positives, true_ne
     print('*** Finished testing in epoch {} ***\n The current accuracy of the network on the test images is %d %%'.format(epoch + 1) % (100 * correct / total))
 
 
-def loop_epoches(testloader, classes, net, criterion):
+def loop_epoches(testloader, classes, b_size, net, criterion, number_of_epoches):
     test_accuracy = []
     f1_score = []
     validation_loss = []
@@ -78,7 +87,7 @@ def loop_epoches(testloader, classes, net, criterion):
 
     save_epoch = 0
 
-    for epoch in range(40):
+    for epoch in range(number_of_epoches):
         save_epoch = epoch
 
         print('*** Start testing in epoch {} ***'.format(epoch + 1))
@@ -89,11 +98,11 @@ def loop_epoches(testloader, classes, net, criterion):
 
         net.load_state_dict(torch.load('../Training/training_epoch-{}'.format(save_epoch)))
         net.eval()
-        test_net(testloader, classes, net, criterion, epoch, true_positives, true_negatives, false_positives, false_negatives, validation_loss, test_accuracy, f1_score, test_images, test_image_label, test_image_pred)
+        test_net(testloader, classes, b_size, net, criterion, epoch, true_positives, true_negatives, false_positives, false_negatives, validation_loss, test_accuracy, f1_score, test_images, test_image_label, test_image_pred)
 
     return test_accuracy, f1_score, validation_loss, test_images, test_image_label, test_image_pred
 
 
-def test(testloader, classes, net, criterion, date_time):
-    test_accuracy, f1_score, validation_loss, test_images, test_image_label, test_image_pred = loop_epoches(testloader, classes, net, criterion)
+def test(testloader, classes, b_size, net, criterion, number_of_epoches):
+    test_accuracy, f1_score, validation_loss, test_images, test_image_label, test_image_pred = loop_epoches(testloader, classes, b_size, net, criterion, number_of_epoches)
     return test_accuracy, f1_score, validation_loss, test_images, test_image_label, test_image_pred

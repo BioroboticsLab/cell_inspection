@@ -17,12 +17,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import itertools
 
-import train, test, train_test #, continue
+import beeimagefolder
+
+import train, test, train_test, heatmap, heatmap_solo #, continue
 
 
-def plot_graph(date_time, epoches, train_loss, test_accuracy, f1_score, validation_loss):
-    # TODO: best test-score, learning rate
-    # TODO: Seperate Loss and Accuracy
+def plot_train_test_graph(date_time, epoches, train_loss, test_accuracy, f1_score, validation_loss):
     f, ax = plt.subplots(1, figsize = (12,6))
     plt.xlabel('Epoch-Counter')
     ax.plot(epoches, train_loss, 'r', label = 'Training loss')
@@ -35,7 +35,36 @@ def plot_graph(date_time, epoches, train_loss, test_accuracy, f1_score, validati
     ax.set_yticks(np.arange(0, 1.1, 0.1))
     plt.legend(loc = 'center right', frameon = True)
     plt.grid(True)
-    plt.savefig('../Plot/graph_{}.png'.format(date_time.strftime('%d-%m-%y_%H:%M')), dpi = 100)
+    plt.savefig('../Plot/train_test_graph_{}.png'.format(date_time.strftime('%d-%m-%y_%H:%M')), dpi = 100)
+
+
+def plot_train_graph(date_time, epoches, train_loss):
+    f, ax = plt.subplots(1, figsize = (20,6))
+    plt.xlabel('Epoch-Counter')
+    ax.plot(epoches, train_loss, 'r', label = 'Training loss')
+    plt.axis([0, 69, 0, 1])
+    ax.set_ylim(bottom=0)
+    ax.set_xticks(np.arange(0, 70, 1))
+    ax.set_yticks(np.arange(0, 1.1, 0.1))
+    plt.legend(loc = 'center right', frameon = True)
+    plt.grid(True)
+    plt.savefig('../Plot/train_graph_{}.png'.format(date_time.strftime('%d-%m-%y_%H:%M')), dpi = 100)
+
+
+def plot_heatgraph(epoches, train_loss, precision, recall, f1_score, date_time):
+    f, ax = plt.subplots(1, figsize = (12,6))
+    plt.xlabel('Epoch-Counter')
+    ax.plot(epoches, train_loss, 'r', label = 'Training loss')
+    ax.plot(epoches, f1_score, 'm', label = 'F1-Score')
+    ax.plot(epoches, precision, 'g', label = 'Precision')
+    ax.plot(epoches, recall, 'b', label = 'Recall')
+    plt.axis([0, 39, 0, 1])
+    ax.set_ylim(bottom=0)
+    ax.set_xticks(np.arange(0, 40, 1))
+    ax.set_yticks(np.arange(0, 1.1, 0.1))
+    plt.legend(loc = 'center right', frameon = True)
+    plt.grid(True)
+    plt.savefig('../Plot/heatgraph_{}.png'.format(date_time.strftime('%d-%m-%y_%H:%M')), dpi = 100)
 
 
 def imshow(img):
@@ -78,18 +107,11 @@ def plot_test_images(date_time, test_images, test_image_label, test_image_pred):
 def load_data():
     #
     # Load the data
-    # The detail folder contains a 'bee' folder with 78x78 grayscale PNG images of bees in honeycombs
+    # The detail folders contains a 'bee' folder with 78x78 grayscale PNG images of bees in honeycombs
     # and a 'notbee' folder with negative examples.
+    # detail_training = ~70-80% of all details, detail_test = ~20-30% of all details
     #
-    full_dataset = torchvision.datasets.ImageFolder(root = "../Videos/detail")
-
-    train_size = int(0.8 * len(full_dataset))
-    test_size = len(full_dataset) - train_size
-    trainset, testset = torch.utils.data.random_split(full_dataset, [train_size, test_size])
-
-    trainset.dataset = copy(trainset.dataset)
-
-    trainset.dataset.transform = transforms.Compose([
+    transform_train = transforms.Compose([
         transforms.RandomOrder([
         transforms.RandomRotation(180),
         transforms.RandomHorizontalFlip(),
@@ -102,19 +124,26 @@ def load_data():
         transforms.ToTensor()
     ])
 
-    testset.dataset.transform = transforms.Compose([
+    transform_test =  transforms.Compose([
         transforms.CenterCrop(54),
         transforms.Resize(32),
         transforms.Grayscale(num_output_channels = 1),
         transforms.ToTensor()
     ])
 
-    trainloader = torch.utils.data.DataLoader(trainset, batch_size = 100, shuffle = True)
-    testloader = torch.utils.data.DataLoader(testset)
+    b_size = 100
+    trainset = beeimagefolder.BeeImageFolder(root='../Videos/detail_training', valid_classes=['0 notbee', '1 bee'], transform=transform_train)
+    testset = beeimagefolder.BeeImageFolder(root='../Videos/detail_test', valid_classes=['0 notbee', '1 bee'], transform=transform_test)
+
+    print('class_to_idx trainset: {}\t class_to_idx testset: {}'.format(trainset.class_to_idx, testset.class_to_idx))
+    
+    trainloader = torch.utils.data.DataLoader(trainset, batch_size=b_size, shuffle=True)
+    # shuffle testset ~ get random image-examples
+    testloader = torch.utils.data.DataLoader(testset, shuffle=True)
 
     classes = ('notbee', 'bee')
 
-    return trainloader, testloader, classes
+    return trainloader, testloader, classes, b_size
 
 
 class Net(nn.Module):
@@ -125,30 +154,17 @@ class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
         self.conv1 = nn.Conv2d(1, 30, 5, stride = 2)
-       # self.drop1 = nn.Dropout2d(p = 0.1)
         self.conv2 = nn.Conv2d(30, 60, 3, stride = 1)
-       # self.norm1 = nn.BatchNorm2d(60)
-       # self.drop2 = nn.Dropout2d(p = 0.1)
         self.conv3 = nn.Conv2d(60, 60, 3, stride = 2)
-       # self.norm2 = nn.BatchNorm2d(60)
-       # self.drop3 = nn.Dropout2d(p = 0.1)
         self.conv4 = nn.Conv2d(60, 120, 3, stride = 1)
-       # self.norm3 = nn.BatchNorm2d(120)
-       # self.drop4 = nn.Dropout2d(p = 0.1)
         self.conv5 = nn.Conv2d(120, 120, 3, stride = 1)
-       # self.drop5 = nn.Dropout()
         self.conv6 = nn.Conv2d(120, 1, 1)
 
     def forward(self, x):
-       # x = self.drop1(F.relu(self.conv1(x)))
         x = F.relu(self.conv1(x))
-       # x = self.drop2(self.norm1(F.relu(self.conv2(x))))
         x = F.relu(self.conv2(x))
-       # x = self.drop3(self.norm2(F.relu(self.conv3(x))))
         x = F.relu(self.conv3(x))
-       # x = self.drop4(self.norm3(F.relu(self.conv4(x))))
         x = F.relu(self.conv4(x))
-       # x = self.drop5(F.relu(self.conv5(x)))
         x = F.relu(self.conv5(x))
         x = torch.sigmoid(self.conv6(x))
 
@@ -156,30 +172,33 @@ class Net(nn.Module):
 
 
 def main(args):
-    trainloader, testloader, classes = load_data()
+    trainloader, testloader, classes, b_size = load_data()
     net = Net()
     criterion = nn.BCELoss()
-    optimizer = optim.Adam(net.parameters(), lr = 0.001)
+    # optim.Adam learning rate ~ default: 0.001
+    optimizer = optim.Adam(net.parameters())
     date_time = datetime.datetime.now()
+    number_of_epoches = 80
 
     if len(args) < 2:
-        print("usage: run.py (train|test|train_test|continue)")
+        print("usage: run.py (train|test|train_test|continue|heatmap)")
     
     elif args[1] == 'train':
-        train_images, train_image_label = train.train(trainloader, classes, net, criterion, optimizer, date_time)
+        epoches, train_loss, train_images, train_image_label = train.train(trainloader, classes, b_size, net, criterion, optimizer, number_of_epoches)
+        plot_train_graph(date_time, epoches, train_loss)
         plot_train_images(date_time, train_images, train_image_label)
 
     elif args[1] == 'test':
         j = json.load(open('../Training/trainloss+epoches.json'))
         train_loss = j["Training loss"]
         epoches = j["Epoch"]
-        test_accuracy, f1_score, validation_loss, test_images, test_image_label, test_image_pred = test.test(testloader, classes, net, criterion, date_time)
-        plot_graph(date_time, epoches, train_loss, test_accuracy, f1_score, validation_loss)
+        test_accuracy, f1_score, validation_loss, test_images, test_image_label, test_image_pred = test.test(testloader, classes, b_size, net, criterion, number_of_epoches)
+        plot_train_test_graph(date_time, epoches, train_loss, test_accuracy, f1_score, validation_loss)
         plot_test_images(date_time, test_images, test_image_label, test_image_pred)
     
     elif args[1] == 'train_test':
-        epoches, train_loss, test_accuracy, f1_score, validation_loss, train_images, train_image_label, test_images, test_image_label, test_image_pred = train_test.train_test(trainloader, testloader, classes, net, criterion, optimizer, date_time)
-        plot_graph(date_time, epoches, train_loss, test_accuracy, f1_score, validation_loss)
+        epoches, train_loss, test_accuracy, f1_score, validation_loss, train_images, train_image_label, test_images, test_image_label, test_image_pred = train_test.train_test(trainloader, testloader, classes, b_size, net, criterion, optimizer, number_of_epoches)
+        plot_train_test_graph(date_time, epoches, train_loss, test_accuracy, f1_score, validation_loss)
         plot_train_images(date_time, train_images, train_image_label)
         plot_test_images(date_time, test_images, test_image_label, test_image_pred)
 
@@ -187,6 +206,18 @@ def main(args):
         #TODO: continue.py
         print('continue.continue() is not yet executable')
     
+    elif args[1] == 'heatmap':
+        j = json.load(open('../Training/trainloss+epoches.json'))
+        train_loss = j["Training loss"]
+        epoches = j["Epoch"]
+        print (epoches)
+        precision, recall, f1_score = heatmap.heatmap(net, date_time, number_of_epoches)
+        plot_heatgraph(epoches, train_loss, precision, recall, f1_score, date_time)
+
+    elif args[1] == 'heatmap_solo':
+        j = json.load(open('../Training/trainloss+epoches.json'))
+        prec, rec = heatmap_solo.heatmap_solo(net, date_time)
+
     else:
         print('unknown command: {}'.format(args[1]))
 

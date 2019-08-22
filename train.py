@@ -25,20 +25,7 @@ def store_json(train_loss, epoches):
     json.dump(d, f, indent = 4)
 
 
-def plot_train_graph(date_time, epoches, train_loss):
-    f, ax = plt.subplots(1, figsize = (12,6))
-    plt.xlabel('Epoch-Counter')
-    ax.plot(epoches, train_loss, 'r', label = 'Training loss')
-    plt.axis([0, 39, 0, 1])
-    ax.set_ylim(bottom=0)
-    ax.set_xticks(np.arange(0, 40, 1))
-    ax.set_yticks(np.arange(0, 1.1, 0.1))
-    plt.legend(loc = 'center right', frameon = True)
-    plt.grid(True)
-    plt.savefig('../Plot/train_graph_{}.png'.format(date_time.strftime('%d-%m-%y_%H:%M')), dpi = 100)
-
-
-def train_net(trainloader, classes, net, criterion, optimizer, epoch, epoches, running_loss, t_loss, train_i, train_loss, train_images, train_image_label, save_epoch):
+def train_net(trainloader, classes, b_size, net, criterion, optimizer, epoch, epoches, running_loss, t_loss, train_i, train_loss, train_images, train_image_label, save_epoch):
     save_epoch_data = open('../Training/training_epoch-{}'.format(save_epoch), 'a')
     save_epoch_data.close()
 
@@ -71,7 +58,6 @@ def train_net(trainloader, classes, net, criterion, optimizer, epoch, epoches, r
             running_loss = 0.0
         
     train_loss += [t_loss / train_i]
-    #TODO: stop using average loss ~ instead: every 10 batches or all
 
     print('Train Epoch: %d\t Average loss: %.6f' %
                     (epoch + 1, t_loss / train_i))
@@ -81,7 +67,7 @@ def train_net(trainloader, classes, net, criterion, optimizer, epoch, epoches, r
     print('*** Finished training in epoch {} ***'.format(epoch + 1))
 
 
-def loop_epoches(trainloader, classes, net, criterion, optimizer):
+def loop_epoches(trainloader, classes, b_size, net, criterion, optimizer, number_of_epoches):
     epoches = []
     train_loss = [] 
 
@@ -90,7 +76,7 @@ def loop_epoches(trainloader, classes, net, criterion, optimizer):
 
     save_epoch = 0
 
-    for epoch in range(40):
+    for epoch in range(number_of_epoches):
         running_loss = 0.0
         t_loss = 0.0
         train_i = 0
@@ -100,14 +86,13 @@ def loop_epoches(trainloader, classes, net, criterion, optimizer):
 
         print('*** Start training in epoch {} ***'.format(epoch + 1))
         net.train()
-        train_net(trainloader, classes, net, criterion, optimizer, epoch, epoches, running_loss, t_loss, train_i, train_loss, train_images, train_image_label, save_epoch)
+        train_net(trainloader, classes, b_size, net, criterion, optimizer, epoch, epoches, running_loss, t_loss, train_i, train_loss, train_images, train_image_label, save_epoch)
         store_json(train_loss, epoches)
     
 
     return net, epoches, train_loss, train_images, train_image_label
 
 
-def train(trainloader, classes, net, criterion, optimizer, date_time):
-    net_trained, epoches, train_loss, train_images, train_image_label = loop_epoches(trainloader, classes, net, criterion, optimizer)
-    plot_train_graph(date_time, epoches, train_loss)
-    return train_images, train_image_label
+def train(trainloader, classes, b_size, net, criterion, optimizer, number_of_epoches):
+    net_trained, epoches, train_loss, train_images, train_image_label = loop_epoches(trainloader, classes, b_size, net, criterion, optimizer, number_of_epoches)
+    return epoches, train_loss, train_images, train_image_label

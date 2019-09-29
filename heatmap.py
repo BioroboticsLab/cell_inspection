@@ -19,48 +19,64 @@ def get_orig_position(liste):
     return liste
 
 
-def create_score(epoch, list_label, list_max, true_positives, false_positives, false_negatives, precision, recall, f1_score):
+def create_score(img_name, epoch, list_label, list_max, true_positives, false_positives, false_negatives, prec_sum, rec_sum, f1_sum):
     i = 0
-    while i < len(list_label):
-        target = list_label[i]
-        print(target)
-        max_distance = 27
-        distances = np.linalg.norm(list_max - target, axis=1)
-        distances[distances > max_distance] = np.inf
-        best_match = np.argmin(distances)
-        match_distance = distances[best_match]
-        if np.isinf(match_distance):
-            false_negatives += 1
+    if (list_max.size == 0):
+        prec = 0.0
+        rec = 0.0
+        f1 = 0.0
+    else:
+        while i < len(list_label):
+            target = list_label[i]
+            print(target)
+            max_distance = 27
+            distances = np.linalg.norm(list_max - target, axis=1)
+            distances[distances > max_distance] = np.inf
+            best_match = np.argmin(distances)
+            match_distance = distances[best_match]
+            if np.isinf(match_distance):
+                false_negatives += 1
+            else:
+                true_positives += 1
+                list_max[best_match] = np.inf
+            print('best_match: {}\t match_distance: {}'.format(best_match, match_distance))
+            i = i + 1
+        false_positives = len(list_max) - true_positives
+        
+        if (false_positives == 0 and true_positives == 0):
+            prec = 0
         else:
-            true_positives += 1
-            list_max[best_match] = np.inf
-        print('best_match: {}\t match_distance: {}'.format(best_match, match_distance))
-        i = i + 1
-    false_positives = len(list_max) - true_positives
-    prec = true_positives / (true_positives + false_positives)
-    rec = true_positives / (true_positives + false_negatives)
-    numerator = prec * rec
-    denominator = prec + rec
-    f1 = 2 * (numerator / denominator)
+            prec = true_positives / (true_positives + false_positives)
+        if (false_negatives == 0 and true_positives == 0):
+            rec = 0
+        else:
+            rec = true_positives / (true_positives + false_negatives)
+        numerator = prec * rec
+        denominator = prec + rec
+        if (denominator == 0):
+            f1 = 0
+        else:
+            f1 = 2 * (numerator / denominator)
+        prec_sum = prec_sum + prec
+        rec_sum = rec_sum + rec
+        f1_sum = f1_sum + f1
 
-    print('Epoch: %d\t Precision: {}\t Recall: {}'.format(prec, rec) % (epoch))
+        print('***Image: {}\t Epoch: %d***\n Precision: {}\t Recall: {}'.format(img_name, prec, rec) % (epoch))
     
-    precision += [prec]
-    recall += [rec]
-    f1_score += [f1]
+    return prec_sum, rec_sum, f1_sum
 
 
-def plot_label_max_coordinates(epoch, original_image, list_label, list_max, date_time):
+def plot_label_max_coordinates(img_name, epoch, original_image, list_label, list_max, date_time):
     fig, ax =  plt.subplots(figsize=(20, 10))
     ax.imshow(original_image, cmap='gray')
     ax.scatter(list_label[:, 0], list_label[:, 1], marker='+')
     ax.scatter(list_max[:, 0], list_max[:, 1], marker='.')
     plt.axis('off')
-    plt.savefig('../Heatmap/label_max_coordinates_{}_{}'.format(date_time.strftime('%d-%m-%y_%H:%M'), epoch), bbox_inches='tight')
+    plt.savefig('../Heatmap/{}_label_max_coordinates_{}_{}'.format(img_name, date_time.strftime('%d-%m-%y_%H:%M'), epoch), bbox_inches='tight')
     plt.close(fig)
 
 
-def plot_transparent_heatmap_overlay(epoch, original_image, output_greater, list_label, list_max, date_time):
+def plot_transparent_heatmap_overlay(img_name, epoch, original_image, output_greater, list_label, list_max, date_time):
     plt.register_cmap(name='VIRIDIS', data=my_viridis)
     cmap = plt.get_cmap('VIRIDIS')
 
@@ -82,11 +98,11 @@ def plot_transparent_heatmap_overlay(epoch, original_image, output_greater, list
     cbar = ax.figure.colorbar(heatmap, ax=ax)
     cbar.ax.set_ylabel(None, rotation=-90, va='bottom')
 
-    plt.savefig('../Heatmap/heatmap_overlay_{}_{}'.format(date_time.strftime('%d-%m-%y_%H:%M'), epoch), bbox_inches='tight')
+    plt.savefig('../Heatmap/{}_heatmap_overlay_{}_{}'.format(img_name, date_time.strftime('%d-%m-%y_%H:%M'), epoch), bbox_inches='tight')
     plt.close(fig)
 
 
-def plot_label_max_coordinates_with_transparent_heatmap_overlay(epoch, original_image, output_greater, list_label, list_max, date_time):
+def plot_label_max_coordinates_with_transparent_heatmap_overlay(img_name, epoch, original_image, output_greater, list_label, list_max, date_time):
     plt.register_cmap(name='VIRIDIS', data=my_viridis)
     cmap = plt.get_cmap('VIRIDIS')
 
@@ -112,11 +128,11 @@ def plot_label_max_coordinates_with_transparent_heatmap_overlay(epoch, original_
     cbar = ax.figure.colorbar(heatmap, ax=ax)
     cbar.ax.set_ylabel(None, rotation=-90, va='bottom')
 
-    plt.savefig('../Heatmap/coordinates_heatmap_overlay_{}_{}'.format(date_time.strftime('%d-%m-%y_%H:%M'), epoch), bbox_inches='tight')
+    plt.savefig('../Heatmap/{}_coordinates_heatmap_overlay_{}_{}'.format(img_name, date_time.strftime('%d-%m-%y_%H:%M'), epoch), bbox_inches='tight')
     plt.close(fig)
 
 
-def plot_heatmap_maxfilter_mask_overlay(epoch, image_max, output_greater, mask, net_coord, date_time):
+def plot_heatmap_maxfilter_mask_overlay(img_name, epoch, image_max, output_greater, mask, net_coord, date_time):
     fig, ax = plt.subplots(figsize=(20,10))
 
     ax.imshow(image_max, cmap='gray')
@@ -125,18 +141,34 @@ def plot_heatmap_maxfilter_mask_overlay(epoch, image_max, output_greater, mask, 
     ax.scatter(net_coord[:,0], net_coord[:,1], marker='x')
     ax.axis('off')
 
-    plt.savefig('../Heatmap/{}_heatmap_maxfilter_mask_overlay_{}'.format(epoch, date_time.strftime('%d-%m-%y_%H:%M')), bbox_inches='tight')
+    plt.savefig('../Heatmap/{}_{}_heatmap_maxfilter_mask_overlay_{}'.format(img_name, epoch, date_time.strftime('%d-%m-%y_%H:%M')), bbox_inches='tight')
     plt.close(fig)
 
 
-def plot_coordinates_next_to_mask_overlay(epoch, original_image, list_label, list_max, image_max, output_greater, mask, net_coord, date_time):
+def plot_coordinates_next_to_mask_overlay(img_name, epoch, original_image, list_label, list_max, image_max, output_greater, mask, net_coord, date_time):
     #TODO
     print('function not yet executable!')
 
 
+def create_heatmaps(img_name, epoch, original_image, output_greater, image_max, mask, list_label, list_max, net_coord, date_time):
+    # compare points of list_label to points of list_max
+    plot_label_max_coordinates(img_name, epoch, original_image, list_label, list_max, date_time)
 
-def create_heatmaps(net, epoch, true_positives, false_positives, false_negatives, precision, recall, f1_score, date_time):
-    im = skimage.io.imread('test.png')
+    # heatmap above original image
+    plot_transparent_heatmap_overlay(img_name, epoch, original_image, output_greater, list_label, list_max, date_time)
+
+    # list_max and list_label coordinates above heatmap
+    plot_label_max_coordinates_with_transparent_heatmap_overlay(img_name, epoch, original_image, output_greater, list_label, list_max, date_time)
+
+    # heatmap with maxfilter and mask (heatmap == maxfilter)
+    plot_heatmap_maxfilter_mask_overlay(img_name, epoch, image_max, output_greater, mask, net_coord, date_time)
+
+    # heatmap with maxfilter and mask next to coordinates
+    plot_coordinates_next_to_mask_overlay(img_name, epoch, original_image, list_label, list_max, image_max, output_greater, mask, net_coord, date_time)
+
+
+def create_coord_lists(number_of_epoches, json_filename, image_filename, img_name, net, epoch, true_positives, false_positives, false_negatives, prec_sum, rec_sum, f1_sum, precision, recall, f1_score, date_time):
+    im = skimage.io.imread(image_filename)
     im = rgb2gray(im)
     im = im[:,:]
 
@@ -149,7 +181,7 @@ def create_heatmaps(net, epoch, true_positives, false_positives, false_negatives
     print(im.shape)
     with torch.no_grad():
         output = net(torch.tensor(im))
-        predicted = output > 0.8
+        predicted = output > 0.5
         print('output.shape: ', output.shape)
         print('output: {}\t predicted: {}'.format(output, predicted))
 
@@ -157,14 +189,14 @@ def create_heatmaps(net, epoch, true_positives, false_positives, false_negatives
 
     image_max = ndi.maximum_filter(output_greater.copy(), size=8, mode='constant')
     mask = output_greater == image_max
-    mask &= output_greater > 0.8
+    mask &= output_greater > 0.5
 
     net_coord = np.nonzero(mask)
     net_coord = np.fliplr(np.column_stack(net_coord))
 
     list_max = get_orig_position(net_coord.copy())
 
-    j = json.load(open('test_markiert.json'))
+    j = json.load(open(json_filename))
     red_pixels = j["red"]
     blue_pixels = j["blue"]
     
@@ -174,25 +206,14 @@ def create_heatmaps(net, epoch, true_positives, false_positives, false_negatives
     
     print('*** list_max (maxima of net_coord) ***\n {}\n *** list_label (marked bees) ***\n {}'.format(list_max, list_label))
 
-    # compare points of list_label to points of list_max
-    plot_label_max_coordinates(epoch, original_image, list_label, list_max, date_time)
+    if (list_max.size != 0 and epoch == number_of_epoches-1):
+        create_heatmaps(img_name, epoch, original_image, output_greater, image_max, mask, list_label, list_max, net_coord, date_time)
 
-    # heatmap above original image
-    plot_transparent_heatmap_overlay(epoch, original_image, output_greater, list_label, list_max, date_time)
+    prec_sum, rec_sum, f1_sum = create_score(img_name, epoch, list_label, list_max, true_positives, false_positives, false_negatives, prec_sum, rec_sum, f1_sum)
 
-    # list_max and list_label coordinates above heatmap
-    plot_label_max_coordinates_with_transparent_heatmap_overlay(epoch, original_image, output_greater, list_label, list_max, date_time)
+    return prec_sum, rec_sum, f1_sum
 
-    # heatmap with maxfilter and mask (heatmap == maxfilter)
-    plot_heatmap_maxfilter_mask_overlay(epoch, image_max, output_greater, mask, net_coord, date_time)
-
-    # heatmap with maxfilter and mask next to coordinates
-    plot_coordinates_next_to_mask_overlay(epoch, original_image, list_label, list_max, image_max, output_greater, mask, net_coord, date_time)
-
-    create_score(epoch, list_label, list_max, true_positives, false_positives, false_negatives, precision, recall, f1_score)
-
-
-def loop_epoches(net, date_time, number_of_epoches):
+def loop_epoches(given_arguments, net, date_time, number_of_epoches):
     f1_score = []
     precision = []
     recall = []
@@ -205,13 +226,32 @@ def loop_epoches(net, date_time, number_of_epoches):
         true_positives = 0.0
         false_positives = 0.0
         false_negatives = 0.0
+        prec_sum = 0.0
+        rec_sum = 0.0
+        f1_sum = 0.0
 
-        net.load_state_dict(torch.load('../Training/training_epoch-{}'.format(save_epoch)))
-        create_heatmaps(net, epoch, true_positives, false_positives, false_negatives, precision, recall, f1_score, date_time)
-
+        for json_filename in given_arguments:
+            j = json.load(open(json_filename))
+            image_filename = find_file(os.path.dirname(json_filename), j["filename"])
+            if image_filename is None:
+                print("Missing image file for {}".format(json_filename))
+                sys.exit(1)
+            dirname, img_name = os.path.split(image_filename.replace('.png', ''))
+            print(img_name)
+        
+            net.load_state_dict(torch.load('../Training/training_epoch-{}'.format(save_epoch)))
+            prec_sum, rec_sum, f1_sum = create_coord_lists(number_of_epoches, json_filename, image_filename, img_name, net, epoch, true_positives, false_positives, false_negatives, prec_sum, rec_sum, f1_sum, f1_score, precision, recall, date_time)
+        prec_sum = prec_sum / len(given_arguments)
+        rec_sum = rec_sum / len(given_arguments)
+        f1_sum = f1_sum / len(given_arguments)
+        precision += [prec_sum]
+        recall += [rec_sum]
+        f1_score += [f1_sum]
+        print('F1_Score: ', f1_score)
+        
     return precision, recall, f1_score
 
 
-def heatmap(net, date_time, number_of_epoches):
-    precision, recall, f1_score = loop_epoches(net, date_time, number_of_epoches)
+def heatmap(given_arguments, net, date_time, number_of_epoches):
+    precision, recall, f1_score = loop_epoches(given_arguments, net, date_time, number_of_epoches)
     return precision, recall, f1_score

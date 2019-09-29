@@ -15,7 +15,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import itertools
 
-
 def store_json(train_loss, epoches):
     d = {
         "Training loss" : train_loss,
@@ -36,14 +35,19 @@ def train_net(trainloader, classes, b_size, net, criterion, optimizer, epoch, ep
         # labels: 1x1
 
         train_images += [inputs[0][0]]
-        train_image_label += [classes[labels[0]]]
-
-        labels = labels.float()
+        if labels[0] > 0.5:
+            class_index = 1
+        else:
+            class_index = 0
+        train_image_label += [classes[class_index]]
 
         optimizer.zero_grad()
 
         # forward + backward + optimize
         outputs = net(inputs)
+        
+        labels = labels.float().reshape(torch.Size(outputs.shape))
+
         loss = criterion(outputs, labels)
         loss.backward()
         optimizer.step()

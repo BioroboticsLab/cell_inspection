@@ -16,7 +16,7 @@ import numpy as np
 import itertools
 
 
-def test_net(testloader, classes, b_size, net, criterion, epoch, true_positives, true_negatives, false_positives, false_negatives, validation_loss, test_accuracy, f1_score, test_images, test_image_label, test_image_pred):
+def test_net(testloader, classes, b_size, net, criterion, epoch, true_positives, true_negatives, false_positives, false_negatives, validation_loss, test_accuracy, f1_score, test_images, test_image_label, test_image_pred, offset_output, offset_xy):
     with torch.no_grad():
         val_loss = 0.0
         val_i = 0
@@ -25,14 +25,14 @@ def test_net(testloader, classes, b_size, net, criterion, epoch, true_positives,
         for index, sample in enumerate(testloader, 0):
             inputs, labels = sample
             outputs = net(inputs)
-            predicted = outputs > 0.5
+            predicted = outputs > 0.8
             out = '%.6f' % outputs
 
             test_images += [inputs[0][0]]
-            test_image_label += [classes[labels[0]]]
+            test_image_label += [classes[int(labels)]]
             test_image_pred += [out]
-
-            labels = labels.float()
+            
+            labels = labels.float().reshape(torch.Size(outputs.shape))
 
             loss = criterion(outputs, labels)
             
@@ -81,6 +81,10 @@ def loop_epoches(testloader, classes, b_size, net, criterion, number_of_epoches)
     f1_score = []
     validation_loss = []
 
+    offset_output = []
+    offset_xy = []
+
+
     test_images = []
     test_image_label = []
     test_image_pred = []
@@ -98,11 +102,11 @@ def loop_epoches(testloader, classes, b_size, net, criterion, number_of_epoches)
 
         net.load_state_dict(torch.load('../Training/training_epoch-{}'.format(save_epoch)))
         net.eval()
-        test_net(testloader, classes, b_size, net, criterion, epoch, true_positives, true_negatives, false_positives, false_negatives, validation_loss, test_accuracy, f1_score, test_images, test_image_label, test_image_pred)
+        test_net(testloader, classes, b_size, net, criterion, epoch, true_positives, true_negatives, false_positives, false_negatives, validation_loss, test_accuracy, f1_score, test_images, test_image_label, test_image_pred, offset_output, offset_xy)
 
-    return test_accuracy, f1_score, validation_loss, test_images, test_image_label, test_image_pred
+    return test_accuracy, f1_score, validation_loss, test_images, test_image_label, test_image_pred #, offset_output, offset_xy
 
 
 def test(testloader, classes, b_size, net, criterion, number_of_epoches):
     test_accuracy, f1_score, validation_loss, test_images, test_image_label, test_image_pred = loop_epoches(testloader, classes, b_size, net, criterion, number_of_epoches)
-    return test_accuracy, f1_score, validation_loss, test_images, test_image_label, test_image_pred
+    return test_accuracy, f1_score, validation_loss, test_images, test_image_label, test_image_pred #, offset_output, offset_xy

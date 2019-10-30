@@ -15,51 +15,56 @@ import matplotlib.pyplot as plt
 import numpy as np
 import itertools
 
-def store_json(train_loss, epoches):
-    d = {
-        "Training loss" : train_loss,
-        "Epoch" : epoches
-    }
-    f = open('../Training/trainloss+epoches.json', 'w')
-    json.dump(d, f, indent = 4)
 
-
-def train_net(trainloader, classes, b_size, net, criterion, optimizer, epoch, epoches, running_loss, t_loss, train_i, train_loss, train_images, train_image_label, save_epoch):
+def train_net(trainloader, classes, b_size, net, criterion, optimizer, epoch, epochs, running_loss, t_loss, train_i, train_loss, save_epoch, number_of_epochs, offset_output, offset_labels, offset_xy):
+    """Train on the detail_training set. Save resulting data for further use (testing, plots)"""
     save_epoch_data = open('../Training/training_epoch-{}'.format(save_epoch), 'a')
     save_epoch_data.close()
 
     for index, batch in enumerate(trainloader, 0):
         inputs, labels = batch
         # index = running counter
-        # inputs: 32x32 tensor
-        # labels: 1x1
-
-        train_images += [inputs[0][0]]
-        if labels[0] > 0.5:
-            class_index = 1
-        else:
-            class_index = 0
-        train_image_label += [classes[class_index]]
-
-        optimizer.zero_grad()
-
-        # forward + backward + optimize
-        outputs = net(inputs)
+        # inputs: batch of up to 200 32x32 tensors
+        # labels: batch of up to 200 1x4 tensors
         
-        labels = labels.float().reshape(torch.Size(outputs.shape))
+        optimizer.zero_grad()
+        outputs = net(inputs.cuda())
+        
+        # labels.size() = torch.Size([200,4])
+        # to get labels (in the dataset known as labelstrength), offset_norm, offset_x, offset_y,
+        # we need to extract the associated columns. This is done with "select"
+        offset_norm = labels.select(1, 1)
+        offset_x = labels.select(1, 2)
+        offset_y = labels.select(1, 3)
+        labels = labels.select(1, 0)
+                
+        # The offset is only needed for the bee-labels, which can bee extracted from the batch.
+        # Since not all batches have the same size (if there is not enough data, the last one will
+        # not have the given batchsize), range(inputs.size()[0]) is used instead of range(b_size).
+        # According to the labelstrength, labels will not be 1 for every bee-image which is why
+        # all labels greater 0 are taken.
+        if save_epoch == (number_of_epochs - 1):
+            for i in range(inputs.size()[0]):
+                if labels[i].item() > 0:
+                    offset_output += [(offset_norm[i].item(), outputs[i].item())]
+                    offset_labels += [(offset_norm[i].item(), labels[i].item())]
+                    offset_xy += [(offset_x[i].item(), offset_y[i].item())]
 
-        loss = criterion(outputs, labels)
+        labels = labels.float().reshape(torch.Size(outputs.shape))
+        loss = criterion(outputs, labels.cuda())
         loss.backward()
         optimizer.step()
 
-        running_loss += loss.item()
-        t_loss += loss.item()
+        loss = float(loss.data.cpu().numpy())
+        running_loss += loss
+        t_loss += loss
         train_i = index + 1
 
         if index % 10 == 9:
             print('Train Epoch: %d\t Index: %3d\t Loss %.6f' %
                     (epoch + 1, index + 1, running_loss / 10))
             running_loss = 0.0
+    print(train_i)
         
     train_loss += [t_loss / train_i]
 
@@ -71,32 +76,32 @@ def train_net(trainloader, classes, b_size, net, criterion, optimizer, epoch, ep
     print('*** Finished training in epoch {} ***'.format(epoch + 1))
 
 
-def loop_epoches(trainloader, classes, b_size, net, criterion, optimizer, number_of_epoches):
-    epoches = []
-    train_loss = [] 
+def loop_epochs(trainloader, classes, b_size, net, criterion, optimizer, number_of_epochs):
+    """Prepare needed parameters and train on the detail_training set for a given number of epochs."""
+    epochs = []
+    train_loss = []
 
-    train_images = []
-    train_image_label = []
+    offset_output = []
+    offset_labels = []
+    offset_xy = []
 
     save_epoch = 0
 
-    for epoch in range(number_of_epoches):
+    for epoch in range(number_of_epochs):
         running_loss = 0.0
         t_loss = 0.0
         train_i = 0
         save_epoch = epoch
 
-        epoches += [epoch]
+        epochs += [epoch]
 
         print('*** Start training in epoch {} ***'.format(epoch + 1))
         net.train()
-        train_net(trainloader, classes, b_size, net, criterion, optimizer, epoch, epoches, running_loss, t_loss, train_i, train_loss, train_images, train_image_label, save_epoch)
-        store_json(train_loss, epoches)
-    
+        train_net(trainloader, classes, b_size, net, criterion, optimizer, epoch, epochs, running_loss, t_loss, train_i, train_loss, save_epoch, number_of_epochs, offset_output, offset_labels, offset_xy)    
 
-    return net, epoches, train_loss, train_images, train_image_label
+    return net, epochs, train_loss, offset_output, offset_labels, offset_xy
 
 
-def train(trainloader, classes, b_size, net, criterion, optimizer, number_of_epoches):
-    net_trained, epoches, train_loss, train_images, train_image_label = loop_epoches(trainloader, classes, b_size, net, criterion, optimizer, number_of_epoches)
-    return epoches, train_loss, train_images, train_image_label
+def train(trainloader, classes, b_size, net, criterion, optimizer, number_of_epochs):
+    net_trained, epochs, train_loss, offset_output, offset_labels, offset_xy = loop_epochs(trainloader, classes, b_size, net, criterion, optimizer, number_of_epochs)
+    return epochs, train_loss, offset_output, offset_labels, offset_xy

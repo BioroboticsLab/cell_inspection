@@ -1,5 +1,4 @@
 import torch
-import os
 import matplotlib.pyplot as plt
 import matplotlib.transforms as mtransforms
 import numpy as np
@@ -12,7 +11,6 @@ from scipy import ndimage as ndi
 from PIL import Image, ImageDraw
 from scipy.spatial.kdtree import KDTree
 from my_viridis import my_viridis
-import plot
 
 
 def find_file(path, filename):
@@ -31,7 +29,7 @@ def get_orig_position(liste):
     return liste
 
 
-def create_score(img_name, epoch, list_label, list_max, num_pred, true_positives, false_positives, false_negatives):
+def create_score(img_name, threshold, list_label, list_max, num_pred, true_positives, false_positives, false_negatives):
     """Match predicted coordinates and marked coordinates. Calculate scores (recall, precision, F1 score)."""
     i = 0
     if (list_max.size == 0):
@@ -61,25 +59,7 @@ def create_score(img_name, epoch, list_label, list_max, num_pred, true_positives
     return num_pred, true_positives, false_positives, false_negatives
 
 
-def create_heatmaps(img_name, epoch, original_image, output_greater, image_max, mask, list_label, list_max, net_coord, date_time):
-    """Create different heatmaps to visualize intermediate steps and result."""
-    # output of network
-    plot.plot_outputs(img_name, epoch, original_image, output_greater, date_time)
-    
-    # results of non-maximum suppression
-    plot.plot_nonmax(img_name, epoch, original_image, image_max, date_time)
-
-    # heatmap overlaid onto raw image
-    plot.plot_transparent_heatmap_overlay(img_name, epoch, original_image, output_greater, list_label, list_max, date_time)
-
-    # list_max and list_label coordinates overlaid onto heatmap
-    plot.plot_label_max_coordinates_with_transparent_heatmap_overlay(img_name, epoch, original_image, output_greater, list_label, list_max, date_time)
-    
-    # compare points of list_label to points of list_max
-    plot.plot_label_max_coordinates(img_name, epoch, original_image, list_label, list_max, date_time)
-
-
-def create_coord_lists(number_of_epochs, json_filename, image_filename, img_name, net, epoch, num_pred, true_positives, false_positives, false_negatives, date_time):
+def create_coord_lists(threshold, json_filename, image_filename, img_name, net, num_pred, true_positives, false_positives, false_negatives, date_time):
     """Generate lists of predicted positions and ground truth positions."""
     im = skimage.io.imread(image_filename)
     if len(im.shape) == 3:
@@ -97,16 +77,16 @@ def create_coord_lists(number_of_epochs, json_filename, image_filename, img_name
     print('im.shape: ', im.shape)
     with torch.no_grad():
         output = net(torch.tensor(im).cuda())
-        predicted = output > 0.96
+        predicted = output > threshold
         print('output.shape: ', output.shape)
         print('output: {}\t predicted: {}'.format(output, predicted))
 
-    output = output.data.cpu().numpy()
+    output = output.data.cpu().numpy()    
     output_greater = output[0, 0].copy()
 
     image_max = ndi.maximum_filter(output_greater.copy(), size=8, mode='constant')
     mask = output_greater == image_max
-    mask &= output_greater > 0.96
+    mask &= output_greater > threshold
 
     net_coord = np.nonzero(mask)
     net_coord = np.fliplr(np.column_stack(net_coord))
@@ -121,27 +101,25 @@ def create_coord_lists(number_of_epochs, json_filename, image_filename, img_name
     list_label.sort()
     list_label = np.array(list_label)
     
-    print('*** list_max (maxima of net_coord) ***\n{}\n*** list_label (marked bees) ***\n{}'.format(list_max, list_label))
+    print('*** list_max (maxima of net_coord) ***\n {}\n *** list_label (marked bees) ***\n {}'.format(list_max, list_label))
 
-    if (list_max.size != 0 and epoch == number_of_epochs-1):
-        create_heatmaps(img_name, epoch, original_image, output_greater, image_max, mask, list_label, list_max, net_coord, date_time)
-
-    num_pred, true_positives, false_positives, false_negatives = create_score(img_name, epoch, list_label, list_max, num_pred, true_positives, false_positives, false_negatives)
+    num_pred, true_positives, false_positives, false_negatives = create_score(img_name, threshold, list_label, list_max, num_pred, true_positives, false_positives, false_negatives)
 
     return num_pred, true_positives, false_positives, false_negatives
-    
 
-def loop_epochs(given_arguments, net, date_time, number_of_epochs):
-    """Loop over each epoch for every raw image in the original_test set."""
+def loop_thresholds(given_arguments, net, date_time, number_of_epochs, thresholds):
+    """Loop over each threshold for every raw image in the original_test set to find the best threshold."""
     f1_score = []
     precision = []
     recall = []
+    best_threshold = 0.0
+    # f1_sum for best threshold
+    best_f1 = 0.0
 
-    save_epoch = 0
+    save_epoch = number_of_epochs - 1
 
-    for epoch in range(number_of_epochs):
-        save_epoch = epoch
-        print('*** Create heatmaps using state of epoch {} ***'.format(epoch))
+    for threshold in thresholds:
+        print('*** Calculate threshold using state of epoch {} ***'.format(save_epoch))
         num_pred = 0.0
         true_positives = 0.0
         false_positives = 0.0
@@ -157,8 +135,8 @@ def loop_epochs(given_arguments, net, date_time, number_of_epochs):
             print(img_name)
         
             net.load_state_dict(torch.load('../Training/training_epoch-{}'.format(save_epoch)))
-            num_pred, true_positives, false_positives, false_negatives = create_coord_lists(number_of_epochs, json_filename, image_filename, img_name, net, epoch, num_pred, true_positives, false_positives, false_negatives, date_time)
-            
+            num_pred, true_positives, false_positives, false_negatives = create_coord_lists(threshold, json_filename, image_filename, img_name, net, num_pred, true_positives, false_positives, false_negatives, date_time)
+
         if (false_positives == 0 and true_positives == 0):
             prec = 0
         else:
@@ -177,17 +155,13 @@ def loop_epochs(given_arguments, net, date_time, number_of_epochs):
         precision += [prec]
         recall += [rec]
         f1_score += [f1]
-        print('Precision:', prec)
-        print('Recall:', rec)
-        print('F1_Score:', f1)
-        if epoch == (number_of_epochs-1):
-            print('Test Epoch: %d\n#predicted: {}\n#true positives: {}\n#false positives: {}\n#false negatives: {}'.format(num_pred, true_positives, false_positives, false_negatives) % (epoch+1))
-
-    print('F1_Score: ', f1_score)
-
-    return precision, recall, f1_score
+        if f1 > best_f1:
+            best_f1 = f1
+            best_threshold = threshold
+        
+    return precision, recall, f1_score, best_threshold, best_f1
 
 
-def heatmap(given_arguments, net, date_time, number_of_epochs):
-    precision, recall, f1_score = loop_epochs(given_arguments, net, date_time, number_of_epochs)
-    return precision, recall, f1_score
+def find_best_threshold(given_arguments, net, date_time, number_of_epochs, thresholds):
+    precision, recall, f1_score, best_threshold, best_f1 = loop_thresholds(given_arguments, net, date_time, number_of_epochs, thresholds)
+    return precision, recall, f1_score, best_threshold, best_f1
